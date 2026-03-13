@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String    @id @default(cuid())
+  name             String
+  email            String    @unique
+  passwordHash     String
+  avatarColor      String
+  pushSubscription Json?
+  householdId      String?
+  household        Household? @relation(fields: [householdId], references: [id])
+  createdAt        DateTime  @default(now())
+
+  paidExpenses        Expense[]        @relation("PaidBy")
+  expenseSplits       ExpenseSplit[]
+  assignedTasks       Task[]
+  completedTasks      TaskCompletion[]
+  sentSettlements     Settlement[]     @relation("Payer")
+  receivedSettlements Settlement[]     @relation("Payee")
+}
+
+model Household {
+  id              String    @id @default(cuid())
+  name            String
+  inviteCode      String    @unique
+  inviteExpiresAt DateTime?
+  createdById     String
+  createdAt       DateTime  @default(now())
+
+  members  User[]
+  expenses Expense[]
+  tasks    Task[]
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id])
+  title       String
+  amount      Decimal  @db.Decimal(10, 2)
+  category    String
+  date        DateTime
+  paidById    String
+  paidBy      User     @relation("PaidBy", fields: [paidById], references: [id])
+  createdAt   DateTime @default(now())
+
+  splits ExpenseSplit[]
+}
+
+model ExpenseSplit {
+  id        String  @id @default(cuid())
+  expenseId String
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+  amount    Decimal @db.Decimal(10, 2)
+  settled   Boolean @default(false)
+}
+
+model Settlement {
+  id          String   @id @default(cuid())
+  householdId String
+  payerId     String
+  payer       User     @relation("Payer", fields: [payerId], references: [id])
+  payeeId     String
+  payee       User     @relation("Payee", fields: [payeeId], references: [id])
+  amount      Decimal  @db.Decimal(10, 2)
+  note        String?
+  createdAt   DateTime @default(now())
+}
+
+model Task {
+  id           String    @id @default(cuid())
+  householdId  String
+  household    Household @relation(fields: [householdId], references: [id])
+  title        String
+  type         String
+  frequency    String?
+  assignedToId String
+  assignedTo   User      @relation(fields: [assignedToId], references: [id])
+  dueDate      DateTime?
+  completedAt  DateTime?
+  isArchived   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  completions TaskCompletion[]
+}
+
+model TaskCompletion {
+  id          String   @id @default(cuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  completedBy String
+  user        User     @relation(fields: [completedBy], references: [id])
+  completedAt DateTime @default(now())
+}
