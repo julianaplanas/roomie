@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { generateInviteCode } from '@/lib/constants'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST() {
   try {
     const payload = getCurrentUser()

@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { hashPassword, signToken, setAuthCookie } from '@/lib/auth'
 import { getRandomAvatarColor } from '@/lib/constants'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
     const { name, email, password } = await req.json()

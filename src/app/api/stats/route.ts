@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { calculateNetBalances, simplifyDebts } from '@/lib/debt'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const payload = getCurrentUser()

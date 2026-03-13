@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { sendPushNotification } from '@/lib/notifications'
 import type { PushSubscription } from 'web-push'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * This endpoint should be called every 15 minutes (or more frequently).
  * It checks each user's preferred notification time (Europe/Madrid)
