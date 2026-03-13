@@ -28,14 +28,17 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-50 overflow-hidden flex items-end sm:items-center justify-center"
       onClick={(e) => {
         if (e.target === backdropRef.current) onClose()
       }}
     >
       <div className="absolute inset-0 bg-black/40" />
-      <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl max-h-[90vh] sm:max-h-[85vh] flex flex-col safe-bottom">
-        <div className="shrink-0 bg-white rounded-t-3xl border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+      <div
+        className="relative bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden"
+        style={{ width: '100%', maxWidth: '100vw', maxHeight: '90dvh' }}
+      >
+        <div className="border-b border-gray-100 px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-foreground">{title}</h2>
           <button
             onClick={onClose}
@@ -44,7 +47,12 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
             ✕
           </button>
         </div>
-        <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">{children}</div>
+        <div
+          className="px-6 py-4 overflow-y-auto overflow-x-hidden safe-bottom"
+          style={{ maxHeight: 'calc(90dvh - 64px)' }}
+        >
+          {children}
+        </div>
       </div>
     </div>
   )
