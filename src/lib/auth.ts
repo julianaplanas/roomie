@@ -43,25 +43,17 @@ export async function comparePassword(password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash)
 }
 
-export function setAuthCookie(token: string) {
-  const cookieStore = cookies()
-  cookieStore.set('token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-    path: '/',
-  })
+export const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  maxAge: 60 * 60 * 24 * 7, // 7 days
+  path: '/',
 }
 
 export function getAuthCookie(): string | undefined {
   const cookieStore = cookies()
   return cookieStore.get('token')?.value
-}
-
-export function clearAuthCookie() {
-  const cookieStore = cookies()
-  cookieStore.delete('token')
 }
 
 export function getCurrentUser(): JWTPayload | null {

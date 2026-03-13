@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
-import { clearAuthCookie } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST() {
-  clearAuthCookie()
-  return NextResponse.json({ success: true })
+  const response = NextResponse.json({ success: true })
+  response.cookies.set('token', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/',
+  })
+  return response
 }

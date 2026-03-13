@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { hashPassword, signToken, setAuthCookie } from '@/lib/auth'
+import { hashPassword, signToken, COOKIE_OPTIONS } from '@/lib/auth'
 import { getRandomAvatarColor } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
@@ -33,9 +33,8 @@ export async function POST(req: NextRequest) {
     })
 
     const token = signToken({ userId: user.id, email: user.email })
-    setAuthCookie(token)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       user: {
         id: user.id,
         name: user.name,
@@ -44,6 +43,8 @@ export async function POST(req: NextRequest) {
         householdId: user.householdId,
       },
     })
+    response.cookies.set('token', token, COOKIE_OPTIONS)
+    return response
   } catch (error) {
     console.error('Register error:', error)
     return NextResponse.json({ error: 'Failed to register' }, { status: 500 })
