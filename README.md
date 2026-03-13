@@ -57,30 +57,108 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Deploy to Railway
 
-1. Create a new project on [Railway](https://railway.app)
-2. Add a PostgreSQL service
-3. Add a new service from your GitHub repo
-4. Set all environment variables from `.env.example`
-5. Railway will use `railway.toml` to build and deploy
+### Step 1: Push your code to GitHub
 
-### Generate VAPID keys
+Create a GitHub repo and push the project:
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/YOUR_USERNAME/roomies.git
+git push -u origin main
+```
+
+### Step 2: Create a Railway project
+
+1. Go to [railway.app](https://railway.app) and sign in (GitHub login works)
+2. Click **New Project** from the dashboard
+
+### Step 3: Add PostgreSQL
+
+1. Inside your new project, click **Add Service** > **Database** > **PostgreSQL**
+2. Railway will provision a Postgres instance automatically
+3. Click on the Postgres service, go to the **Variables** tab, and copy the `DATABASE_URL` — you'll need it in Step 5
+
+### Step 4: Add your app service
+
+1. Click **Add Service** > **GitHub Repo**
+2. Select your Roomies repository
+3. Railway will detect the `railway.toml` and use it for build/deploy config
+
+### Step 5: Generate VAPID keys
+
+Run this locally to generate your Web Push keys:
 
 ```bash
 npx web-push generate-vapid-keys
 ```
 
-Copy the public and private keys into your environment variables.
+This outputs a public key and a private key. Save both — you'll add them as environment variables next.
 
-### Cron job for task reminders
+### Step 6: Set environment variables
 
-Set up a Railway cron job that calls:
+Click on your app service in Railway, go to the **Variables** tab, and add each of these:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Click **Add Reference** > select the Postgres service's `DATABASE_URL` (Railway links it automatically) |
+| `JWT_SECRET` | A random string, 32+ characters. Generate one with: `openssl rand -base64 32` |
+| `VAPID_PUBLIC_KEY` | The public key from Step 5 |
+| `VAPID_PRIVATE_KEY` | The private key from Step 5 |
+| `VAPID_EMAIL` | `mailto:you@example.com` (your email) |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Same value as `VAPID_PUBLIC_KEY` |
+| `CRON_SECRET` | A random string for protecting the cron endpoint. Generate one with: `openssl rand -base64 16` |
+
+> **Tip**: For `DATABASE_URL`, use Railway's variable references instead of pasting the raw string. Click the **Add Reference** button and select it from the Postgres service — this way it stays in sync if the DB URL ever changes.
+
+### Step 7: Deploy
+
+Railway will automatically trigger a deploy when you push to `main`. The `railway.toml` runs:
 
 ```
-GET /api/cron/task-reminders
-Authorization: Bearer <CRON_SECRET>
+npx prisma generate && npx prisma migrate deploy && npm run build
 ```
 
-Schedule: daily at 8:00 AM (`0 8 * * *`)
+This generates the Prisma client, runs any pending migrations, and builds the Next.js app. You can monitor the build logs in the **Deployments** tab.
+
+### Step 8: Get your public URL
+
+1. Click on your app service > **Settings** > **Networking**
+2. Click **Generate Domain** to get a `*.up.railway.app` URL
+3. Optionally, add a custom domain here
+
+### Step 9: Set up the daily task reminder cron
+
+Roomies has an endpoint that sends push notifications for tasks due today. You need to call it on a schedule:
+
+**Option A — Railway Cron Service (recommended)**
+
+1. In your project, click **Add Service** > **Cron**
+2. Set the schedule to `0 8 * * *` (every day at 8:00 AM UTC)
+3. Set the command to:
+   ```bash
+   curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://YOUR_APP_URL.up.railway.app/api/cron/task-reminders
+   ```
+   Replace `YOUR_CRON_SECRET` with the value you set in Step 6, and `YOUR_APP_URL` with your actual Railway domain.
+
+**Option B — External cron service**
+
+Use [cron-job.org](https://cron-job.org), UptimeRobot, or any HTTP cron service to make a GET request to:
+
+```
+GET https://YOUR_APP_URL.up.railway.app/api/cron/task-reminders
+Header: Authorization: Bearer YOUR_CRON_SECRET
+```
+
+### Step 10: Install the PWA
+
+Open your Railway URL on your phone:
+
+- **iOS**: Open in Safari > tap Share > **Add to Home Screen**
+- **Android**: Chrome will show an "Install" banner, or tap the menu > **Install app**
+
+> **Note**: Push notifications require iOS 16.4+ on iPhones. On older iOS versions, the app works fine but won't receive push notifications.
 
 ## Project Structure
 
