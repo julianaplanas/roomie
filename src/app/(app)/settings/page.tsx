@@ -21,22 +21,32 @@ interface HouseholdInfo {
   createdById: string
 }
 
+interface NotifPrefs {
+  notificationTime: string | null
+  hasSubscription: boolean
+}
+
 export default function SettingsPage() {
   const { user, logout, refreshUser } = useAuthContext()
   const [members, setMembers] = useState<Member[]>([])
   const [household, setHousehold] = useState<HouseholdInfo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [notifTime, setNotifTime] = useState<string>('')
+  const [notifEnabled, setNotifEnabled] = useState(false)
+  const [savingNotif, setSavingNotif] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
-      const [membersRes, householdRes] = await Promise.all([
+      const [membersRes, householdRes, notifRes] = await Promise.all([
         api.get<{ members: Member[] }>('/api/household/members'),
         api.get<{ household: HouseholdInfo }>('/api/household/info'),
+        api.get<NotifPrefs>('/api/notifications/preferences'),
       ])
       setMembers(membersRes.members)
       setHousehold(householdRes.household)
+      setNotifTime(notifRes.notificationTime || '')
+      setNotifEnabled(notifRes.hasSubscription)
     } catch {
-      // household info endpoint might not exist yet, just get members
       try {
         const membersRes = await api.get<{ members: Member[] }>('/api/household/members')
         setMembers(membersRes.members)
@@ -92,6 +102,51 @@ export default function SettingsPage() {
     }
   }
 
+  const handleSaveNotifTime = async () => {
+    setSavingNotif(true)
+    try {
+      await api.post('/api/notifications/preferences', {
+        notificationTime: notifTime || null,
+      })
+      toast.success(notifTime ? `Reminders set for ${notifTime} (Madrid time)` : 'Reminders disabled')
+    } catch (err: unknown) {
+      toast.error((err as Error).message)
+    } finally {
+      setSavingNotif(false)
+    }
+  }
+
+  const handleEnableNotifications = async () => {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+      toast.error('Notifications are not supported in this browser')
+      return
+    }
+
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') {
+      toast.error('Notification permission denied')
+      return
+    }
+
+    try {
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      if (!vapidKey) {
+        toast.error('Push notifications not configured on this server')
+        return
+      }
+      const registration = await navigator.serviceWorker.ready
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: vapidKey,
+      })
+      await api.post('/api/notifications/subscribe', subscription.toJSON())
+      setNotifEnabled(true)
+      toast.success('Notifications enabled!')
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to enable notifications')
+    }
+  }
+
   const isAdmin = household?.createdById === user?.id
 
   return (
@@ -120,6 +175,54 @@ export default function SettingsPage() {
                 Regenerate code
               </button>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Notifications */}
+      <div className="card mb-4">
+        <h2 className="font-semibold text-foreground mb-3">Notifications</h2>
+
+        {!notifEnabled ? (
+          <div>
+            <p className="text-sm text-muted mb-3">
+              Enable push notifications to get reminders when tasks are due.
+            </p>
+            <button onClick={handleEnableNotifications} className="btn-secondary w-full">
+              Enable notifications
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p className="text-sm text-muted mb-3">
+              Choose when you&apos;d like to receive daily task reminders (Europe/Madrid time).
+            </p>
+            <div className="flex items-center gap-3">
+              <input
+                type="time"
+                className="input flex-1"
+                value={notifTime}
+                onChange={(e) => setNotifTime(e.target.value)}
+              />
+              <button
+                onClick={handleSaveNotifTime}
+                className="btn-primary shrink-0"
+                disabled={savingNotif}
+              >
+                {savingNotif ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+            {notifTime && (
+              <p className="text-xs text-muted mt-2">
+                You&apos;ll get a reminder at {notifTime} (Madrid time) for tasks due that day.
+              </p>
+            )}
+            <button
+              onClick={() => { setNotifTime(''); handleSaveNotifTime() }}
+              className="text-xs text-red-500 mt-2 hover:underline"
+            >
+              Disable reminders
+            </button>
           </div>
         )}
       </div>

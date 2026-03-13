@@ -108,19 +108,19 @@ Click on your app service in Railway, go to the **Variables** tab, and add each 
 | `VAPID_PRIVATE_KEY` | The private key from Step 5 |
 | `VAPID_EMAIL` | `mailto:you@example.com` (your email) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Same value as `VAPID_PUBLIC_KEY` |
-| `CRON_SECRET` | A random string for protecting the cron endpoint. Generate one with: `openssl rand -base64 16` |
+| `CRON_SECRET` | A random string for protecting the reminder endpoint. Generate one with: `openssl rand -base64 16` |
+| `PORT` | `3000` |
 
 > **Tip**: For `DATABASE_URL`, use Railway's variable references instead of pasting the raw string. Click the **Add Reference** button and select it from the Postgres service — this way it stays in sync if the DB URL ever changes.
 
 ### Step 7: Deploy
 
-Railway will automatically trigger a deploy when you push to `main`. The `railway.toml` runs:
+Railway will automatically trigger a deploy when you push to `main`. The `railway.toml` does:
 
-```
-npx prisma generate && npx prisma migrate deploy && npm run build
-```
+- **Build**: `npx prisma generate && npm run build` — generates the Prisma client and builds Next.js
+- **Start**: `npx prisma migrate deploy && npm start` — runs pending migrations then starts the server
 
-This generates the Prisma client, runs any pending migrations, and builds the Next.js app. You can monitor the build logs in the **Deployments** tab.
+Migrations run at start time (not build time) because the database isn't reachable during Docker builds. You can monitor build and deploy logs in the **Deployments** tab.
 
 ### Step 8: Get your public URL
 
@@ -128,28 +128,15 @@ This generates the Prisma client, runs any pending migrations, and builds the Ne
 2. Click **Generate Domain** to get a `*.up.railway.app` URL
 3. Optionally, add a custom domain here
 
-### Step 9: Set up the daily task reminder cron
+### Step 9: Set up task reminders
 
-Roomies has an endpoint that sends push notifications for tasks due today. You need to call it on a schedule:
+Each user can choose their own reminder time in **Settings > Notifications** (displayed in Europe/Madrid timezone). The app has an endpoint at `/api/cron/task-reminders` that checks which users should be notified right now and sends push notifications.
 
-**Option A — Railway Cron Service (recommended)**
+You need to call this endpoint every 15 minutes. Use [cron-job.org](https://cron-job.org) (free) or UptimeRobot:
 
-1. In your project, click **Add Service** > **Cron**
-2. Set the schedule to `0 8 * * *` (every day at 8:00 AM UTC)
-3. Set the command to:
-   ```bash
-   curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://YOUR_APP_URL.up.railway.app/api/cron/task-reminders
-   ```
-   Replace `YOUR_CRON_SECRET` with the value you set in Step 6, and `YOUR_APP_URL` with your actual Railway domain.
-
-**Option B — External cron service**
-
-Use [cron-job.org](https://cron-job.org), UptimeRobot, or any HTTP cron service to make a GET request to:
-
-```
-GET https://YOUR_APP_URL.up.railway.app/api/cron/task-reminders
-Header: Authorization: Bearer YOUR_CRON_SECRET
-```
+- **URL**: `GET https://YOUR_APP_URL.up.railway.app/api/cron/task-reminders`
+- **Header**: `Authorization: Bearer YOUR_CRON_SECRET`
+- **Schedule**: every 15 minutes (`*/15 * * * *`)
 
 ### Step 10: Install the PWA
 

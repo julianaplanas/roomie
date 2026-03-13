@@ -4,8 +4,12 @@ import { prisma } from '@/lib/prisma'
 import { sendPushNotification } from '@/lib/notifications'
 import type { PushSubscription } from 'web-push'
 
+/**
+ * This endpoint should be called every 15 minutes (or more frequently).
+ * It checks each user's preferred notification time (Europe/Madrid)
+ * and sends task reminders to users whose time matches the current window.
+ */
 export async function GET(req: NextRequest) {
-  // Verify cron secret
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
@@ -14,46 +18,84 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const todayEnd = new Date(todayStart)
-    todayEnd.setDate(todayEnd.getDate() + 1)
+    // Get current time in Europe/Madrid
+    const nowMadrid = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' })
+    )
+    const currentHH = String(nowMadrid.getHours()).padStart(2, '0')
+    const currentMM = String(nowMadrid.getMinutes()).padStart(2, '0')
+    const currentTime = `${currentHH}:${currentMM}`
 
-    // Find tasks due today that haven't been completed
-    const tasksDueToday = await prisma.task.findMany({
+    // Match users whose notification time is within the current 15-min window
+    // e.g. if called at 08:00, match 08:00-08:14
+    const currentMinutes = nowMadrid.getHours() * 60 + nowMadrid.getMinutes()
+    const windowEnd = currentMinutes + 14
+
+    // Find users with push subscriptions and notification time set
+    const users = await prisma.user.findMany({
       where: {
-        isArchived: false,
-        completedAt: null,
-        dueDate: {
-          gte: todayStart,
-          lt: todayEnd,
-        },
+        pushSubscription: { not: Prisma.DbNull },
+        notificationTime: { not: null },
+        householdId: { not: null },
       },
-      include: {
-        assignedTo: {
-          select: { id: true, name: true, pushSubscription: true },
-        },
+      select: {
+        id: true,
+        notificationTime: true,
+        pushSubscription: true,
+        householdId: true,
       },
     })
+
+    // Filter users whose notification time falls in the current window
+    const eligibleUsers = users.filter((u) => {
+      if (!u.notificationTime) return false
+      const [hh, mm] = u.notificationTime.split(':').map(Number)
+      const userMinutes = hh * 60 + mm
+      return userMinutes >= currentMinutes && userMinutes <= windowEnd
+    })
+
+    // Today in UTC for date comparison
+    const now = new Date()
+    const todayStart = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+    const todayEnd = new Date(todayStart)
+    todayEnd.setDate(todayEnd.getDate() + 1)
 
     let sent = 0
     const expiredSubscriptions: string[] = []
 
-    for (const task of tasksDueToday) {
-      if (task.assignedTo.pushSubscription) {
-        const result = await sendPushNotification(
-          task.assignedTo.pushSubscription as unknown as PushSubscription,
-          {
-            title: 'Task due today',
-            body: task.title,
-            url: '/tasks',
-          }
-        )
-        if (result.expired) {
-          expiredSubscriptions.push(task.assignedTo.id)
-        } else {
-          sent++
+    for (const user of eligibleUsers) {
+      // Find tasks due today assigned to this user
+      const tasksDueToday = await prisma.task.findMany({
+        where: {
+          assignedToId: user.id,
+          householdId: user.householdId!,
+          isArchived: false,
+          completedAt: null,
+          dueDate: { gte: todayStart, lt: todayEnd },
+        },
+        select: { title: true },
+      })
+
+      if (tasksDueToday.length === 0) continue
+
+      const body =
+        tasksDueToday.length === 1
+          ? tasksDueToday[0].title
+          : `You have ${tasksDueToday.length} tasks due today`
+
+      const result = await sendPushNotification(
+        user.pushSubscription as unknown as PushSubscription,
+        {
+          title: 'Tasks due today',
+          body,
+          url: '/tasks',
         }
+      )
+
+      if (result.expired) {
+        expiredSubscriptions.push(user.id)
+      } else {
+        sent++
       }
     }
 
@@ -67,9 +109,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      tasksDueToday: tasksDueToday.length,
+      currentTimeMadrid: currentTime,
+      eligibleUsers: eligibleUsers.length,
       notificationsSent: sent,
-      expiredSubscriptions: expiredSubscriptions.length,
     })
   } catch (error) {
     console.error('Cron error:', error)

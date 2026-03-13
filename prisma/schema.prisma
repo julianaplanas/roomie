@@ -13,8 +13,9 @@ model User {
   email            String    @unique
   passwordHash     String
   avatarColor      String
-  pushSubscription Json?
-  householdId      String?
+  pushSubscription  Json?
+  notificationTime  String?   // HH:mm format, Europe/Madrid timezone
+  householdId       String?
   household        Household? @relation(fields: [householdId], references: [id])
   createdAt        DateTime  @default(now())
 
